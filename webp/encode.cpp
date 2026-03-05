@@ -67,10 +67,14 @@ val encode(std::string data, int width, int height, bool has_alpha, SimpleWebPCo
 	return encoded_data;
 }
 
-val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnimationFrame> frames)
+val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnimationFrame> frames, AnimEncoderOptions options)
 {
 	WebPAnimEncoderOptions enc_options;
 	WebPAnimEncoderOptionsInit(&enc_options);
+	enc_options.kmin = options.kmin;
+	enc_options.kmax = options.kmax;
+	enc_options.minimize_size = options.minimize_size;
+	enc_options.allow_mixed = options.allow_mixed;
 	WebPAnimEncoder* enc = WebPAnimEncoderNew(width, height, &enc_options);
 	int stride = (has_alpha ? 4 : 3) * width;
 	int timestamp = 0;
@@ -82,6 +86,27 @@ val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnima
 		{
 			applyPicConfig(config, frame.config);
 		}
+		if (options.method >= 0) config.method = options.method;
+		if (options.target_size >= 0) config.target_size = options.target_size;
+		if (options.pass >= 0) config.pass = options.pass;
+		if (options.preprocessing >= 0) config.preprocessing = options.preprocessing;
+		if (options.sns_strength >= 0) config.sns_strength = options.sns_strength;
+		if (options.filter_strength >= 0) config.filter_strength = options.filter_strength;
+		if (options.filter_sharpness >= 0) config.filter_sharpness = options.filter_sharpness;
+		if (options.filter_type >= 0) config.filter_type = options.filter_type;
+		if (options.autofilter >= 0) config.autofilter = options.autofilter;
+		if (options.alpha_quality >= 0) config.alpha_quality = options.alpha_quality;
+		if (options.alpha_compression >= 0) config.alpha_compression = options.alpha_compression;
+		if (options.alpha_filtering >= 0) config.alpha_filtering = options.alpha_filtering;
+		if (options.segments >= 0) config.segments = options.segments;
+		if (options.partitions >= 0) config.partitions = options.partitions;
+		if (options.partition_limit >= 0) config.partition_limit = options.partition_limit;
+		if (options.use_sharp_yuv >= 0) config.use_sharp_yuv = options.use_sharp_yuv;
+		if (options.near_lossless >= 0) config.near_lossless = options.near_lossless;
+		if (options.exact >= 0) config.exact = options.exact;
+		if (options.emulate_jpeg_size >= 0) config.emulate_jpeg_size = options.emulate_jpeg_size;
+		if (options.qmin >= 0) config.qmin = options.qmin;
+		if (options.qmax >= 0) config.qmax = options.qmax;
 
 		WebPPicture pic;
 		if (!WebPPictureInit(&pic))
@@ -103,8 +128,22 @@ val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnima
 	}
 
 	WebPData webp_data;
+	WebPDataInit(&webp_data);
 	WebPAnimEncoderAssemble(enc, &webp_data);
-	val encoded_data = Uint8Array.new_(typed_memory_view(webp_data.size, webp_data.bytes));
 	WebPAnimEncoderDelete(enc);
+
+	if (options.loop_count != 0)
+	{
+		WebPMux* mux = WebPMuxCreate(&webp_data, 1);
+		WebPMuxAnimParams params;
+		WebPMuxGetAnimationParams(mux, &params);
+		params.loop_count = options.loop_count;
+		WebPMuxSetAnimationParams(mux, &params);
+		WebPDataClear(&webp_data);
+		WebPMuxAssemble(mux, &webp_data);
+		WebPMuxDelete(mux);
+	}
+
+	val encoded_data = Uint8Array.new_(typed_memory_view(webp_data.size, webp_data.bytes));
 	return encoded_data;
 }

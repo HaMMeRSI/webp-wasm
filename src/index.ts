@@ -2,6 +2,7 @@ import type {
   WebPConfig,
   Nullable,
   WebPAnimationFrame,
+  WebPAnimEncoderOptions,
   WebPDecodedImageData,
   DecodedWebPAnimationFrame,
 } from './types'
@@ -58,11 +59,41 @@ export const encode = async (
   return module.encode(data, width, height, hasAlpha, webpConfig)
 }
 
+const defaultAnimEncoderOptions: WebPAnimEncoderOptions = {
+  kmin: 0,
+  kmax: 0,
+  minimize_size: 0,
+  allow_mixed: 0,
+  loop_count: 0,
+  method: -1,
+  target_size: -1,
+  pass: -1,
+  preprocessing: -1,
+  sns_strength: -1,
+  filter_strength: -1,
+  filter_sharpness: -1,
+  filter_type: -1,
+  autofilter: -1,
+  alpha_quality: -1,
+  alpha_compression: -1,
+  alpha_filtering: -1,
+  segments: -1,
+  partitions: -1,
+  partition_limit: -1,
+  use_sharp_yuv: -1,
+  near_lossless: -1,
+  exact: -1,
+  emulate_jpeg_size: -1,
+  qmin: -1,
+  qmax: -1,
+}
+
 export const encodeAnimation = async (
   width: number,
   height: number,
   hasAlpha: boolean,
-  frames: WebPAnimationFrame[]
+  frames: WebPAnimationFrame[],
+  options?: Partial<WebPAnimEncoderOptions>
 ): Promise<Nullable<Uint8Array>> => {
   const module = await Module()
   const frameVector = new module.VectorWebPAnimationFrame()
@@ -81,7 +112,8 @@ export const encodeAnimation = async (
       has_config: hasConfig,
     })
   })
-  return module.encodeAnimation(width, height, hasAlpha, frameVector)
+  const opts = { ...defaultAnimEncoderOptions, ...options }
+  return module.encodeAnimation(width, height, hasAlpha, frameVector, opts)
 }
 
 export const decoderVersion = async (): Promise<string> => {
