@@ -1,300 +1,125 @@
-# webp.wasm
+# webp.wasm (fork)
 
-webp.wasm is a pure Webassembly / Javascript port of libwebp. The library supports encoding animated WebP.
+> Fork of [nieyuyao/webp-wasm](https://github.com/nieyuyao/webp-wasm) with the full `WebPConfig` and `WebPAnimEncoderOptions` exposed to JavaScript.
 
-![CI](https://github.com/nieyuyao/webp-wasm/workflows/CI/badge.svg)
-![latest tag](https://badgen.net/github/release/nieyuyao/webp-wasm)
-![npm](https://img.shields.io/npm/v/wasm-webp.svg)
+WebAssembly port of [libwebp](https://chromium.googlesource.com/webm/libwebp/). Supports encoding and decoding static and animated WebP images.
+
+## What this fork adds
+
+The upstream library only exposes `quality` and `lossless` for animation encoding. This fork passes the **complete libwebp configuration** through to the WASM layer:
+
+| Category | Options |
+|---|---|
+| **Encoder** | `method`, `pass`, `target_size`, `sns_strength`, `preprocessing` |
+| **Filtering** | `filter_strength`, `filter_sharpness`, `filter_type`, `autofilter` |
+| **Alpha** | `alpha_quality`, `alpha_compression`, `alpha_filtering` |
+| **Animation** | `loop_count`, `kmin`, `kmax`, `minimize_size`, `allow_mixed` |
+| **Advanced** | `segments`, `partitions`, `partition_limit`, `use_sharp_yuv`, `near_lossless`, `exact`, `emulate_jpeg_size`, `qmin`, `qmax` |
+
+All options default to `-1` (use libwebp default), so the API is fully backward compatible.
 
 ## Install
 
 ```shell
-npm i wasm-webp
+npm i github:HaMMeRSI/webp-wasm
 ```
 
-## APIs
+## Usage
+
+### Basic animation encoding (unchanged from upstream)
+
+```typescript
+import { encodeAnimation } from 'wasm-webp'
+
+const webp = await encodeAnimation(width, height, true, frames)
+```
+
+### With full encoder options
+
+```typescript
+const webp = await encodeAnimation(width, height, true, frames, {
+  method: 6,          // compression effort (0-6, higher = slower + smaller)
+  pass: 2,            // entropy analysis passes (1-10)
+  loop_count: 0,      // 0 = infinite loop
+  kmax: 10,           // keyframe interval
+  sns_strength: 80,   // spatial noise shaping (0-100)
+  filter_strength: 40,
+  alpha_quality: 90,
+  use_sharp_yuv: 1,   // sharper color conversion
+  near_lossless: 60,  // near-lossless preprocessing (0-100, 100 = off)
+})
+```
+
+### Per-frame quality
+
+```typescript
+const frames = [
+  { data: rgba1, duration: 100, config: { lossless: 0, quality: 80 } },
+  { data: rgba2, duration: 100, config: { lossless: 1 } },
+]
+const webp = await encodeAnimation(100, 100, true, frames)
+```
+
+## Full API
 
 ### Encode
 
-#### encode
-
-Get encoder encoderVersion.
-
-`function encoderVersion(): Promise<string>`
-
-##### Example
-
-```javascript
-const version = await encoderVersion()
-console.log(version) // 1.3.2
-```
-
-#### encodeRGB
-
-Encodes rgb bitmap an returns WebP Uint8Array. The `width` and `height` parameters of the bitmap should be provided.
-
-`function encodeRGB(rgb: Uint8Array, width: number, height: number, quality?: number): Promise<Nullable<Uint8Array>>`
-
-##### Example
-
-```javascript
-...
-const ctx = canvas.getContext('2d')!
-const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-const buf = new Uint8Array(3 * canvas.width, canvas.height) 
-let j = 0
-// remove alpha
-imgData.data.forEach((pixel, i) => {
-  if ((i + 1) % 4 === 0) {
-    return
-  }
-  buf[j] = pixel
-  j++
-})
-const webpData = await encodeRGB(buf, canvas.width, canvas.height)
-const blob = new Blob([webpData!], {type: 'image/webp'})
-const blobURL = URL.createObjectURL(blob);
-// download webp
-const a = document.createElement('a')
-a.download = '1.webp'
-a.href = blobURL
-document.body.appendChild(a)
-a.click()
-a.remove()
-```
-
-#### encodeRGBA
-
-Encodes rgba bitmap an returns WebP Uint8Array.
-
-`function encodeRGBA(rgba: Uint8Array, width: number, height: number, quality?: number): Promise<Nullable<Uint8Array>>`
-
-##### Example
-
-```javascript
-...
-const ctx = canvas.getContext('2d')!
-const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-const webpData = await encodeRGBA(imgData.data, canvas.width, canvas.height)
-// download webp
-...
-```
-
- #### encode
-
-A more advanced API is based on the WebPConfig. <b>Only the lossless and quality parameters are supported now !!!</b>. You can generate low-quality webp with this function.
-
-`function encodeRGBA(data: Uint8Array, width: number, height: number, hasAlpha: boolean,config: Partial<WebPConfig>): Promise<Nullable<Uint8Array>>`
-
-- hasAlpha: `boolean`
-
-Whether to include alpha chanel.
-
-- WebPConfig.lossless: `number`
-
-Lossless encoding (0=lossy(default), 1=lossless).
-
-- WebPConfig.quality: `number`
-
-Between 0 and 100. Default value is 100.
-
-##### Example
-
-```javascript
-...
-const ctx = canvas.getContext('2d')!
-const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-const webpData = await encode(imgData.data, canvas.width, canvas.height, true, { lossless: 0 })
-// download webp
-...
-```
-
-#### encodeAnimation
-
-Returns animated WebP like `GIF`.
-
-`function encodeAnimation(width: number, height: number, hasAlpha: boolean, frames: WebPAnimationFrame[]): Promise<Nullable<Uint8Array>>`
-
-- hasAlpha: `boolean`
-
-Whether to include alpha chanel.
-
-The WebPAnimationFrame has follow properties:
-
-- WebPAnimationFrame.data: `Uint8Array`
-
-Frame bitmap.
-
-- WebPAnimationFrame.duration: `number`
-
-Duration of frame.
-
-- WebPAnimationFrame.config: `WebPConfig` (optional)
-
-Per-frame encoding configuration. If not provided, default config is used (lossless: 0, quality: 100).
-
-##### Example
-
-```javascript
-...
-// record each frame
-frames.push({
-  data: ctx.getImageData(0, 0, 100, 100).data,
-  duration: 20
-})
-// with per-frame config
-frames.push({
-  data: ctx.getImageData(0, 0, 100, 100).data,
-  duration: 20,
-  config: { lossless: 0, quality: 80 }
-})
-const webpData = await encodeAnimation(100, 100, true, frames)
-...
-// download webp
-```
+- `encoderVersion(): Promise<string>`
+- `encodeRGB(rgb, width, height, quality?): Promise<Uint8Array | null>`
+- `encodeRGBA(rgba, width, height, quality?): Promise<Uint8Array | null>`
+- `encode(data, width, height, hasAlpha, config): Promise<Uint8Array | null>`
+- `encodeAnimation(width, height, hasAlpha, frames, options?): Promise<Uint8Array | null>`
 
 ### Decode
 
-#### decoderVersion
+- `decoderVersion(): Promise<string>`
+- `decodeRGB(data): Promise<WebPDecodedImageData | null>`
+- `decodeRGBA(data): Promise<WebPDecodedImageData | null>`
+- `decodeAnimation(data, hasAlpha): Promise<DecodedWebPAnimationFrame[] | null>`
 
-Get decoder version.
+## WebPAnimEncoderOptions
 
-`function decoderVersion(): Promise<string>`
-
-##### Example
-
-```javascript
-const version = await decoderVersion()
-console.log(version) // 1.3.2
-```
-
-#### decodeRGB
-
-Decodes webp and outputs `WebPDecodedImageData` contains rgb bitmap.
-
-`function decodeRGB(data: Uint8Array): Promise<Nullable<WebPDecodedImageData>>`
-
-##### Example
-
-```javascript
-...
-const fr = new FileReader()
-fr.onload = () => {
-  if (!fr.result) {
-    return
-  }
-  webpData = fr.result as Uint8Array
-  const result = await decodeRGB(webpData)
-  // draw imageData
-  const ctx = canvas.getContext('2d')!
-	ctx.clearRect(0, 0, canvas.width, canvas.height)
-	canvas.style.width = `${result.width}px`
-	canvas.style.height = `${result.height}px`
-	canvas.width = result.width
-	canvas.height = result.height
-	ctx.putImageData(new ImageData(new Uint8ClampedArray(result.data)), 0, 0)
+```typescript
+interface WebPAnimEncoderOptions {
+  kmin: number              // min keyframe distance
+  kmax: number              // max keyframe distance (0 = auto)
+  minimize_size: number     // minimize output size (0/1)
+  allow_mixed: number       // allow mixed lossy/lossless frames (0/1)
+  loop_count: number        // animation loop count (0 = infinite)
+  method: number            // compression method (0-6)
+  target_size: number       // target file size in bytes (0 = off)
+  pass: number              // entropy analysis passes (1-10)
+  preprocessing: number     // 0=none, 1=smooth, 2=dither
+  sns_strength: number      // spatial noise shaping (0-100)
+  filter_strength: number   // deblocking filter strength (0-100)
+  filter_sharpness: number  // filter sharpness (0-7)
+  filter_type: number       // 0=simple, 1=strong
+  autofilter: number        // auto-adjust filter strength (0/1)
+  alpha_quality: number     // alpha channel quality (0-100)
+  alpha_compression: number // alpha compression (0/1)
+  alpha_filtering: number   // 0=none, 1=fast, 2=best
+  segments: number          // quality segments (1-4)
+  partitions: number        // token partitions (0-3)
+  partition_limit: number   // quality degradation limit (0-100)
+  use_sharp_yuv: number     // sharper YUV conversion (0/1)
+  near_lossless: number     // near-lossless preprocessing (0-100)
+  exact: number             // preserve transparent RGB (0/1)
+  emulate_jpeg_size: number // JPEG-like file sizing (0/1)
+  qmin: number              // min quality bound (0-100)
+  qmax: number              // max quality bound (0-100)
 }
-// read webp file
-fr.readAsArrayBuffer(file)
-...
 ```
 
-#### decodeRGBA
+## Building from source
 
-Decodes webp and outputs `WebPDecodedImageData` contains rgba bitmap.
-
-`function decodeRGB(data: Uint8Array): Promise<Nullable<WebPDecodedImageData>>`
-
-##### Example
-
-```javascript
-...
-const fr = new FileReader()
-fr.onload = () => {
-  if (!fr.result) {
-    return
-  }
-  webpData = fr.result as Uint8Array
-  const result = await decodeRGBA(webpData)
-  // draw imageData
-  ...
-}
-// webp file
-fr.readAsArrayBuffer(file)
-...
-```
-
-#### decodeAnimation
-
-Decoding animated WebP image. Returns an array of frames.
-
-`function decodeAnimation(data: Uint8Array, hasAlpha: boolean): Promise<Nullable<DecodedWebPAnimationFrame[]>>`
-
-##### Example
-
-```javascript
-...
-const fr = new FileReader()
-fr.onload = () => {
-  if (!fr.result) {
-    return
-  }
-  webpData = fr.result as Uint8Array
-  const result = await decodeRGBA(webpData)
-  // draw imageData
-  ...
-}
-// webp file
-fr.readAsArrayBuffer(file)
-...
-```
-
-#### DecodedWebPAnimationFrame
-
-The object have the following properties:
-
-- DecodedWebPAnimationFrame.width: `number`
-
-The frame image width.
-
-- DecodedWebPAnimationFrame.height: `number`
-
-The frame image height.
-
-- DecodedWebPAnimationFrame.duration: `number`
-
-The frame display duration.
-
-- DecodedWebPAnimationFrame.data: `Uint8Array`
-
-Raw data in pixels.
-
-#### WebPDecodedImageData
-
-The object have the following properties:
-
-- WebPDecodedImageData.width: `number`
-
-The image width in pixels.
-
-- WebPDecodedImageData.height: `number`
-
-The image height in pixels.
-
-- WebPDecodedImageData.data: `Uint8Array`
-
-Raw data in pixels.
-
-> Note: It has same properties as browser `ImageData` object, but it is not. There is actually no `ImageData` in node.
-
-## Playing Examples
+Requires [Emscripten](https://emscripten.org/). See upstream repo for build setup.
 
 ```shell
-npm run build-wasm:dev && npm run dev
+npm run build:esm    # ESM build
+npm run build:cjs    # CJS build
 ```
 
-## Building
+## Credits
 
-```shell
-npm run build
-```
+- [libwebp](https://chromium.googlesource.com/webm/libwebp/) by Google
+- [nieyuyao/webp-wasm](https://github.com/nieyuyao/webp-wasm) — original WebAssembly bindings
