@@ -166,7 +166,11 @@ val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnima
 		params.loop_count = options.loop_count;
 		WebPMuxSetAnimationParams(mux, &params);
 		WebPDataClear(&webp_data);
-		WebPMuxAssemble(mux, &webp_data);
+		if (WebPMuxAssemble(mux, &webp_data) != WEBP_MUX_OK)
+		{
+			WebPMuxDelete(mux);
+			return val::null();
+		}
 		WebPMuxDelete(mux);
 	}
 
