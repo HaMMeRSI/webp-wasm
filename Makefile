@@ -10,6 +10,7 @@ webp-wasm.js: webp.o decode.o encode.o version.o ${CODEC_DIR}/libwebp.a ${CODEC_
 		-s EXPORT_ES6=$(EXPORT_ES6) \
 		-s MODULARIZE \
 		-s ALLOW_MEMORY_GROWTH=1 \
+		-s MAXIMUM_MEMORY=4gb \
 		-o $(WASM_OUT_DIR)/$@ \
 		$+ \
 		-v

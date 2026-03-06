@@ -111,7 +111,7 @@ val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnima
 		WebPPicture pic;
 		if (!WebPPictureInit(&pic))
 		{
-			WebPPictureFree(&pic);
+			WebPAnimEncoderDelete(enc);
 			return val::null();
 		}
 		pic.use_argb = 1;
@@ -121,8 +121,10 @@ val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnima
 			? WebPPictureImportRGBA(&pic, (uint8_t*)frame.data.c_str(), stride)
 			: WebPPictureImportRGB(&pic, (uint8_t*)frame.data.c_str(), stride);
 		int success = WebPAnimEncoderAdd(enc, &pic, timestamp, &config);
+		WebPPictureFree(&pic);
 		timestamp = timestamp + frame.duration;
 		if (!success) {
+			WebPAnimEncoderDelete(enc);
 			return val::null();
 		}
 	}
