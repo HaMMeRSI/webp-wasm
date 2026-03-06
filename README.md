@@ -1,6 +1,6 @@
 # webp.wasm (fork)
 
-> Fork of [nieyuyao/webp-wasm](https://github.com/nieyuyao/webp-wasm) with the full `WebPConfig` and `WebPAnimEncoderOptions` exposed to JavaScript.
+> Fork of [nieyuyao/webp-wasm](https://github.com/nieyuyao/webp-wasm) with the full `WebPConfig` and `WebPAnimEncoderOptions` exposed to JavaScript, plus a streaming animation encoder API.
 
 WebAssembly port of [libwebp](https://chromium.googlesource.com/webm/libwebp/). Supports encoding and decoding static and animated WebP images.
 
@@ -16,7 +16,9 @@ The upstream library only exposes `quality` and `lossless` for animation encodin
 | **Animation** | `loop_count`, `kmin`, `kmax`, `minimize_size`, `allow_mixed` |
 | **Advanced** | `segments`, `partitions`, `partition_limit`, `use_sharp_yuv`, `near_lossless`, `exact`, `emulate_jpeg_size`, `qmin`, `qmax` |
 
-All options default to `-1` (use libwebp default), so the API is fully backward compatible.
+This fork also adds `createAnimEncoder(...)`, which lets you add animation frames incrementally and either `finalize()` or `dispose()` the encoder explicitly.
+
+All animation options default to `-1` (use libwebp default), so the batch animation API remains backward compatible.
 
 ## Install
 
@@ -60,6 +62,29 @@ const frames = [
 const webp = await encodeAnimation(100, 100, true, frames)
 ```
 
+### Streaming animation encoding
+
+```typescript
+import { createAnimEncoder } from 'wasm-webp'
+
+const encoder = await createAnimEncoder(100, 100, true, {
+  method: 6,
+  loop_count: 0,
+})
+
+for (const frame of frames) {
+  const ok = encoder.addFrame(frame.data, frame.duration, frame.config)
+  if (!ok) {
+    encoder.dispose()
+    throw new Error('Failed to add animation frame')
+  }
+}
+
+const webp = encoder.finalize()
+```
+
+Use `dispose()` when aborting early so the WASM-side encoder is released without assembling the animation.
+
 ## Full API
 
 ### Encode
@@ -69,6 +94,7 @@ const webp = await encodeAnimation(100, 100, true, frames)
 - `encodeRGBA(rgba, width, height, quality?): Promise<Uint8Array | null>`
 - `encode(data, width, height, hasAlpha, config): Promise<Uint8Array | null>`
 - `encodeAnimation(width, height, hasAlpha, frames, options?): Promise<Uint8Array | null>`
+- `createAnimEncoder(width, height, hasAlpha, options?): Promise<AnimEncoder>`
 
 ### Decode
 
@@ -107,6 +133,16 @@ interface WebPAnimEncoderOptions {
   emulate_jpeg_size: number // JPEG-like file sizing (0/1)
   qmin: number              // min quality bound (0-100)
   qmax: number              // max quality bound (0-100)
+}
+```
+
+## AnimEncoder
+
+```typescript
+interface AnimEncoder {
+  addFrame(data: Uint8Array, duration: number, config?: WebPConfig): boolean
+  finalize(): Uint8Array | null
+  dispose(): void
 }
 ```
 
