@@ -129,9 +129,14 @@ val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnima
 		}
 	}
 
+	WebPAnimEncoderAdd(enc, NULL, timestamp, NULL);
+
 	WebPData webp_data;
 	WebPDataInit(&webp_data);
-	WebPAnimEncoderAssemble(enc, &webp_data);
+	if (!WebPAnimEncoderAssemble(enc, &webp_data)) {
+		WebPAnimEncoderDelete(enc);
+		return val::null();
+	}
 	WebPAnimEncoderDelete(enc);
 
 	if (options.loop_count != 0)
