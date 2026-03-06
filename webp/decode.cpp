@@ -15,10 +15,12 @@ val decodeRGB(std::string data)
   int width;
   int height;
   uint8_t *output = WebPDecodeRGB((uint8_t *)data.c_str(), data_size, &width, &height);
+  if (output == NULL) return val::null();
   val obj = val::object();
   obj.set("width", val(width));
   obj.set("height", val(height));
   obj.set("data", val::global("Uint8Array").new_(typed_memory_view(3 * width * height, output)));
+  WebPFree(output);
   return obj;
 }
 
@@ -28,10 +30,12 @@ val decodeRGBA(std::string data)
   int width;
   int height;
   uint8_t *output = WebPDecodeRGBA((uint8_t *)data.c_str(), data_size, &width, &height);
+  if (output == NULL) return val::null();
   val obj = val::object();
   obj.set("width", width);
   obj.set("height", height);
   obj.set("data", val::global("Uint8Array").new_(typed_memory_view(4 * width * height, output)));
+  WebPFree(output);
   return obj;
 }
 
@@ -40,25 +44,26 @@ val decode(std::string data, bool has_alpha)
   uint8_t* buf = (uint8_t *)data.c_str();
   int data_size = data.size();
   WebPBitstreamFeatures features;
-  if (!WebPGetFeatures(buf, data_size, &features))
+  if (WebPGetFeatures(buf, data_size, &features) != VP8_STATUS_OK)
   {
     return val::null();
   }
   WebPDecoderConfig config;
+  WebPInitDecoderConfig(&config);
   config.input.has_alpha = has_alpha;
   config.output.width = features.width;
   config.output.height = features.height;
   // only support ARGB and RGB !!!
   config.output.colorspace = has_alpha ? MODE_ARGB : MODE_RGB;
 
-  auto success = WebPDecode(buf, data_size, &config);
-  if (!success)
+  auto status = WebPDecode(buf, data_size, &config);
+  if (status != VP8_STATUS_OK)
   {
     WebPFreeDecBuffer(&config.output);
     return val::null();
   }
-  WebPFreeDecBuffer(&config.output);
   val raw = val::global("Uint8Array").new_(typed_memory_view(config.output.u.RGBA.size, config.output.u.RGBA.rgba));
+  WebPFreeDecBuffer(&config.output);
   val obj = val::object();
   obj.set("width", features.width);
   obj.set("height", features.height);
@@ -73,8 +78,8 @@ val decodeAnimation(std::string data, bool has_alpha)
   webp_data.bytes = (uint8_t *)data.c_str();
   webp_data.size = data_size;
   WebPAnimDecoderOptions dec_options;
-  dec_options.color_mode = has_alpha ? MODE_RGBA : MODE_RGB;
   WebPAnimDecoderOptionsInit(&dec_options);
+  dec_options.color_mode = has_alpha ? MODE_RGBA : MODE_RGB;
   WebPAnimDecoder *dec = WebPAnimDecoderNew(&webp_data, &dec_options);
   if (dec == nullptr)
   {
@@ -90,7 +95,7 @@ val decodeAnimation(std::string data, bool has_alpha)
   {
     uint8_t *buf;
     int timestamp;
-    WebPAnimDecoderGetNext(dec, &buf, &timestamp);
+    if (!WebPAnimDecoderGetNext(dec, &buf, &timestamp)) break;
     val frame = val::object();
     val raw = val::global("Uint8Array").new_(typed_memory_view(frame_size, buf));
     frame.set("width", anim_info.canvas_width);

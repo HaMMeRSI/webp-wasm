@@ -19,13 +19,19 @@ val encoder_version()
 val encodeRGB(std::string rgb, int width, int height, int quality_factor) {
 	uint8_t* output;
 	size_t size = WebPEncodeRGB((uint8_t*)rgb.c_str(), width, height, 3 * width, quality_factor, &output);
-	return Uint8Array.new_(typed_memory_view(size, output));
+	if (size == 0) return val::null();
+	val encoded_data = Uint8Array.new_(typed_memory_view(size, output));
+	WebPFree(output);
+	return encoded_data;
 }
 
 val encodeRGBA(std::string rgba, int width, int height, int quality_factor) {
 	uint8_t* output;
 	size_t size = WebPEncodeRGBA((uint8_t*)rgba.c_str(), width, height, 4 * width, quality_factor, &output);
-	return Uint8Array.new_(typed_memory_view(size, output));
+	if (size == 0) return val::null();
+	val encoded_data = Uint8Array.new_(typed_memory_view(size, output));
+	WebPFree(output);
+	return encoded_data;
 }
 
 val encode(std::string data, int width, int height, bool has_alpha, SimpleWebPConfig config)
@@ -46,19 +52,21 @@ val encode(std::string data, int width, int height, bool has_alpha, SimpleWebPCo
 	pic.use_argb = 1;
 	pic.width = width;
 	pic.height = height;
-	if (!WebPPictureAlloc(&pic))
+	pic.writer = WebPMemoryWrite;
+	pic.custom_ptr = &wrt;
+	int import_ok = has_alpha
+		? WebPPictureImportRGBA(&pic, (uint8_t*)data.c_str(), width * 4)
+		: WebPPictureImportRGB(&pic, (uint8_t*)data.c_str(), width * 3);
+	if (!import_ok)
 	{
 		WebPPictureFree(&pic);
 		return val::null();
 	}
-	pic.writer = WebPMemoryWrite;
-	pic.custom_ptr = &wrt;
-	has_alpha
-		? WebPPictureImportRGBA(&pic, (uint8_t*)data.c_str(), width * 4)
-		: WebPPictureImportRGB(&pic, (uint8_t*)data.c_str(), width * 3);
 	int success = WebPEncode(&webp_config, &pic);
 	if (!success)
 	{
+		WebPPictureFree(&pic);
+		WebPMemoryWriterClear(&wrt);
 		return val::null();
 	}
 	val encoded_data = Uint8Array.new_(typed_memory_view(wrt.size, wrt.mem));
@@ -117,9 +125,15 @@ val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnima
 		pic.use_argb = 1;
 		pic.width = width;
 		pic.height = height;
-		has_alpha
+		int import_ok = has_alpha
 			? WebPPictureImportRGBA(&pic, (uint8_t*)frame.data.c_str(), stride)
 			: WebPPictureImportRGB(&pic, (uint8_t*)frame.data.c_str(), stride);
+		if (!import_ok)
+		{
+			WebPPictureFree(&pic);
+			WebPAnimEncoderDelete(enc);
+			return val::null();
+		}
 		int success = WebPAnimEncoderAdd(enc, &pic, timestamp, &config);
 		WebPPictureFree(&pic);
 		timestamp = timestamp + frame.duration;
@@ -142,6 +156,11 @@ val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnima
 	if (options.loop_count != 0)
 	{
 		WebPMux* mux = WebPMuxCreate(&webp_data, 1);
+		if (mux == NULL)
+		{
+			WebPDataClear(&webp_data);
+			return val::null();
+		}
 		WebPMuxAnimParams params;
 		WebPMuxGetAnimationParams(mux, &params);
 		params.loop_count = options.loop_count;
@@ -152,5 +171,6 @@ val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnima
 	}
 
 	val encoded_data = Uint8Array.new_(typed_memory_view(webp_data.size, webp_data.bytes));
+	WebPDataClear(&webp_data);
 	return encoded_data;
 }
