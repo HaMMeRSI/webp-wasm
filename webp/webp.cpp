@@ -46,6 +46,11 @@ EMSCRIPTEN_BINDINGS(module)
 
 	emscripten::register_vector<WebPAnimationFrame>("VectorWebPAnimationFrame");
 
+	emscripten::class_<StreamingAnimEncoder>("StreamingAnimEncoder")
+		.constructor<int, int, bool, AnimEncoderOptions>()
+		.function("addFrame", &StreamingAnimEncoder::addFrame)
+		.function("finalize", &StreamingAnimEncoder::finalize);
+
 	function("encoder_version", &encoder_version);
 	function("encodeRGB", &encodeRGB);
 	function("encodeRGBA", &encodeRGBA);

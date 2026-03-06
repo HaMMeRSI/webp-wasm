@@ -2,7 +2,14 @@ import path from 'path'
 import fs from 'fs'
 import url from 'url'
 import { createCanvas, Image } from '@napi-rs/canvas'
-import { encoderVersion, encodeRGB, encodeRGBA, encode, encodeAnimation } from '../dist/esm'
+import {
+	encoderVersion,
+	encodeRGB,
+	encodeRGBA,
+	encode,
+	encodeAnimation,
+	createAnimEncoder,
+} from '../dist/esm'
 import { matchBuffer } from './utils'
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
@@ -106,5 +113,48 @@ describe('encode', () => {
 		expect(
 			matchBuffer(webpData, fs.readFileSync(path.resolve(__dirname, './fixtures/running-ball.webp')))
 		).toBeTruthy()
+	})
+
+	test('encode animated webp incrementally', async () => {
+		const canvas = createCanvas(100, 100)
+		const ctx = canvas.getContext('2d')
+		const frames = []
+		for (let x = 0; x <= 90; x += 10) {
+			ctx.clearRect(0, 0, 100, 100)
+			ctx.fillStyle = 'red'
+			ctx.beginPath()
+			ctx.arc(x, 50, 10, 0, 2 * Math.PI)
+			ctx.closePath()
+			ctx.fill()
+			frames.push({
+				data: ctx.getImageData(0, 0, 100, 100).data.buffer,
+				duration: 1000,
+			})
+		}
+
+		const encoder = await createAnimEncoder(100, 100, true)
+		for (const frame of frames) {
+			expect(encoder.addFrame(frame.data, frame.duration)).toBe(true)
+		}
+
+		const webpData = encoder.finalize()
+		expect(
+			matchBuffer(webpData, fs.readFileSync(path.resolve(__dirname, './fixtures/running-ball.webp')))
+		).toBeTruthy()
+		expect(encoder.finalize()).toBeNull()
+	})
+
+	test('dispose streaming encoder without finalizing', async () => {
+		const canvas = createCanvas(20, 20)
+		const ctx = canvas.getContext('2d')
+		ctx.fillStyle = 'blue'
+		ctx.fillRect(0, 0, 20, 20)
+
+		const encoder = await createAnimEncoder(20, 20, true)
+		expect(encoder.addFrame(ctx.getImageData(0, 0, 20, 20).data.buffer, 100)).toBe(true)
+		expect(() => encoder.dispose()).not.toThrow()
+		expect(() => encoder.dispose()).not.toThrow()
+		expect(encoder.addFrame(ctx.getImageData(0, 0, 20, 20).data.buffer, 100)).toBe(false)
+		expect(encoder.finalize()).toBeNull()
 	})
 })

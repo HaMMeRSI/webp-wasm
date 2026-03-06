@@ -81,6 +81,42 @@ export const encodeAnimation = (width, height, hasAlpha, frames, options) => __a
     const opts = Object.assign(Object.assign({}, defaultAnimEncoderOptions), options);
     return module.encodeAnimation(width, height, hasAlpha, frameVector, opts);
 });
+export const createAnimEncoder = (width, height, hasAlpha, options) => __awaiter(void 0, void 0, void 0, function* () {
+    const module = yield Module();
+    const opts = Object.assign(Object.assign({}, defaultAnimEncoderOptions), options);
+    const encoder = new module.StreamingAnimEncoder(width, height, hasAlpha, opts);
+    let released = false;
+    const release = () => {
+        if (released)
+            return;
+        encoder.delete();
+        released = true;
+    };
+    return {
+        addFrame(data, duration, config) {
+            if (released)
+                return false;
+            const hasConfig = config !== undefined;
+            const frameConfig = Object.assign(Object.assign({}, defaultWebpConfig), config);
+            frameConfig.lossless = Math.min(1, Math.max(0, frameConfig.lossless));
+            frameConfig.quality = Math.min(100, Math.max(0, frameConfig.quality));
+            return encoder.addFrame(data, duration, frameConfig, hasConfig);
+        },
+        finalize() {
+            if (released)
+                return null;
+            try {
+                return encoder.finalize();
+            }
+            finally {
+                release();
+            }
+        },
+        dispose() {
+            release();
+        },
+    };
+});
 export const decoderVersion = () => __awaiter(void 0, void 0, void 0, function* () {
     const module = yield Module();
     return module.decoder_version();

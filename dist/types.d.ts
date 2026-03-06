@@ -49,4 +49,11 @@ export interface WebPAnimEncoderOptions {
 	qmax: number
 }
 
+export interface AnimEncoder {
+	addFrame(data: Uint8Array, duration: number, config?: WebPConfig): boolean
+	finalize(): Nullable<Uint8Array>
+	/** Free WASM resources without finalizing. Use in error/abort paths. */
+	dispose(): void
+}
+
 export type Nullable<T> = T | null

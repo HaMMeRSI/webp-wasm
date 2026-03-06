@@ -5,6 +5,7 @@ import type {
   WebPAnimEncoderOptions,
   WebPDecodedImageData,
   DecodedWebPAnimationFrame,
+  AnimEncoder,
 } from './types'
 // @ts-ignore
 import Module from './webp-wasm'
@@ -114,6 +115,46 @@ export const encodeAnimation = async (
   })
   const opts = { ...defaultAnimEncoderOptions, ...options }
   return module.encodeAnimation(width, height, hasAlpha, frameVector, opts)
+}
+
+export const createAnimEncoder = async (
+  width: number,
+  height: number,
+  hasAlpha: boolean,
+  options?: Partial<WebPAnimEncoderOptions>,
+): Promise<AnimEncoder> => {
+  const module = await Module()
+  const opts = { ...defaultAnimEncoderOptions, ...options }
+  const encoder = new module.StreamingAnimEncoder(width, height, hasAlpha, opts)
+  let released = false
+
+  const release = () => {
+    if (released) return
+    encoder.delete()
+    released = true
+  }
+
+  return {
+    addFrame(data: Uint8Array, duration: number, config?: WebPConfig): boolean {
+      if (released) return false
+      const hasConfig = config !== undefined
+      const frameConfig = { ...defaultWebpConfig, ...config }
+      frameConfig.lossless = Math.min(1, Math.max(0, frameConfig.lossless))
+      frameConfig.quality = Math.min(100, Math.max(0, frameConfig.quality))
+      return encoder.addFrame(data, duration, frameConfig, hasConfig)
+    },
+    finalize(): Nullable<Uint8Array> {
+      if (released) return null
+      try {
+        return encoder.finalize()
+      } finally {
+        release()
+      }
+    },
+    dispose(): void {
+      release()
+    },
+  }
 }
 
 export const decoderVersion = async (): Promise<string> => {

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.decodeAnimation = exports.decodeRGBA = exports.decodeRGB = exports.decoderVersion = exports.encodeAnimation = exports.encode = exports.encodeRGBA = exports.encodeRGB = exports.encoderVersion = void 0;
+exports.decodeAnimation = exports.decodeRGBA = exports.decodeRGB = exports.decoderVersion = exports.createAnimEncoder = exports.encodeAnimation = exports.encode = exports.encodeRGBA = exports.encodeRGB = exports.encoderVersion = void 0;
 // @ts-ignore
 const webp_wasm_1 = __importDefault(require("./webp-wasm"));
 // default webp config
@@ -52,6 +52,26 @@ const defaultAnimEncoderOptions = {
     allow_mixed: 0,
     loop_count: 0,
     method: -1,
+    target_size: -1,
+    pass: -1,
+    preprocessing: -1,
+    sns_strength: -1,
+    filter_strength: -1,
+    filter_sharpness: -1,
+    filter_type: -1,
+    autofilter: -1,
+    alpha_quality: -1,
+    alpha_compression: -1,
+    alpha_filtering: -1,
+    segments: -1,
+    partitions: -1,
+    partition_limit: -1,
+    use_sharp_yuv: -1,
+    near_lossless: -1,
+    exact: -1,
+    emulate_jpeg_size: -1,
+    qmin: -1,
+    qmax: -1,
 };
 const encodeAnimation = (width, height, hasAlpha, frames, options) => __awaiter(void 0, void 0, void 0, function* () {
     const module = yield (0, webp_wasm_1.default)();
@@ -72,6 +92,44 @@ const encodeAnimation = (width, height, hasAlpha, frames, options) => __awaiter(
     return module.encodeAnimation(width, height, hasAlpha, frameVector, opts);
 });
 exports.encodeAnimation = encodeAnimation;
+const createAnimEncoder = (width, height, hasAlpha, options) => __awaiter(void 0, void 0, void 0, function* () {
+    const module = yield (0, webp_wasm_1.default)();
+    const opts = Object.assign(Object.assign({}, defaultAnimEncoderOptions), options);
+    const defaultConfig = Object.assign({}, defaultWebpConfig);
+    const encoder = new module.StreamingAnimEncoder(width, height, hasAlpha, opts);
+    let released = false;
+    const release = () => {
+        if (released)
+            return;
+        encoder.delete();
+        released = true;
+    };
+    return {
+        addFrame(data, duration, config) {
+            if (released)
+                return false;
+            const hasConfig = config !== undefined;
+            const frameConfig = Object.assign(Object.assign({}, defaultConfig), config);
+            frameConfig.lossless = Math.min(1, Math.max(0, frameConfig.lossless));
+            frameConfig.quality = Math.min(100, Math.max(0, frameConfig.quality));
+            return encoder.addFrame(data, duration, frameConfig, hasConfig);
+        },
+        finalize() {
+            if (released)
+                return null;
+            try {
+                return encoder.finalize();
+            }
+            finally {
+                release();
+            }
+        },
+        dispose() {
+            release();
+        },
+    };
+});
+exports.createAnimEncoder = createAnimEncoder;
 const decoderVersion = () => __awaiter(void 0, void 0, void 0, function* () {
     const module = yield (0, webp_wasm_1.default)();
     return module.decoder_version();

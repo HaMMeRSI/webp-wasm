@@ -58,3 +58,17 @@ emscripten::val encodeRGBA(std::string rgba, int width, int height, int quality_
 emscripten::val encode(std::string data, int width, int height, bool use_alpha, SimpleWebPConfig config);
 
 emscripten::val encodeAnimation(int width, int height, bool has_alpha, std::vector<WebPAnimationFrame> frames, AnimEncoderOptions options);
+
+class StreamingAnimEncoder {
+	WebPAnimEncoder* enc_;
+	int width_, height_;
+	bool has_alpha_;
+	int stride_;
+	int timestamp_;
+	AnimEncoderOptions options_;
+public:
+	StreamingAnimEncoder(int w, int h, bool has_alpha, AnimEncoderOptions opts);
+	~StreamingAnimEncoder();
+	bool addFrame(std::string data, int duration, SimpleWebPConfig config, bool has_config);
+	emscripten::val finalize();
+};
